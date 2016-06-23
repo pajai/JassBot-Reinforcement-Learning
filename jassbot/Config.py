@@ -33,3 +33,7 @@ assert len(trump_ranking) == 9
 assert len(non_trump_ranking) == 9
 assert len(trump_point) == 9
 assert len(non_trump_point) == 9
+
+# gamma parameter of the q-learning algo
+# how much from the following best qval influence the previous one
+gamma = 0.95

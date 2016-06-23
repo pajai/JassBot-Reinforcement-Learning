@@ -4,15 +4,16 @@ import numpy as np
 from Config import *
 
 def init():
-    print("init game")
+    get_logger().info("init game")
 
     state = {}
     for i in range(2):
+        state['t%s_game_points' % i] = 0
         state['t%s_points' % i] = 0
     return state
 
 def new_game(state):
-    print("new game")
+    get_logger().info("new game")
     game = []
     for suit in suits:
         for rank in ranks:
@@ -65,8 +66,8 @@ def count_round(current, trump):
 assert count_round(["heart_k", "heart_j", "heart_10", "club_6"], "heart") == 34
 assert count_round(["heart_k", "heart_j", "heart_10", "club_6"], "club") == 16
 
-def player_winning_round(current, trump, player_start_idx):
-    assert len(current) == 4
+def player_holding_hand(current, trump, player_start_idx):
+    assert len(current) <= 4
     ranking = []
     served_suit = card_suit(current[0])
     rank_not_served_suit = 100
@@ -83,13 +84,15 @@ def player_winning_round(current, trump, player_start_idx):
     win_idx = np.argmin(np.array(ranking))
     return (player_start_idx + win_idx) % 4
 
-assert player_winning_round(["heart_k", "heart_j", "heart_10", "club_6"], "heart", 0) == 1
-assert player_winning_round(["heart_k", "heart_j", "heart_10", "club_6"], "heart", 1) == 2
-assert player_winning_round(["heart_k", "heart_j", "heart_10", "club_6"], "heart", 2) == 3
-assert player_winning_round(["heart_k", "heart_j", "heart_10", "club_6"], "heart", 3) == 0
-assert player_winning_round(["heart_k", "heart_j", "heart_10", "club_6"], "club", 0) == 3
-assert player_winning_round(["heart_k", "heart_j", "heart_10", "club_6"], "club", 1) == 0
-assert player_winning_round(['diamond_7', 'heart_10', 'heart_6', 'spade_9'], "club", 0) == 0
+assert player_holding_hand(["heart_k", "heart_j", "heart_10", "club_6"], "heart", 0) == 1
+assert player_holding_hand(["heart_k", "heart_j", "heart_10", "club_6"], "heart", 1) == 2
+assert player_holding_hand(["heart_k", "heart_j", "heart_10", "club_6"], "heart", 2) == 3
+assert player_holding_hand(["heart_k", "heart_j", "heart_10", "club_6"], "heart", 3) == 0
+assert player_holding_hand(["heart_k", "heart_j", "heart_10", "club_6"], "club", 0) == 3
+assert player_holding_hand(["heart_k", "heart_j", "heart_10", "club_6"], "club", 1) == 0
+assert player_holding_hand(['diamond_7', 'heart_10', 'heart_6', 'spade_9'], "club", 0) == 0
+assert player_holding_hand(['diamond_7', 'heart_10', 'heart_6'], "club", 0) == 0
+assert player_holding_hand(["heart_k", "heart_j"], "heart", 1) == 2
 
 
 def possible_cards(player_cards, current, trump):
@@ -137,51 +140,96 @@ assert possible_cards(["heart_9", "diamond_10"], [], "diamond") == \
 assert possible_cards(["heart_9", "diamond_10"], ["diamond_6", "heart_j"], "heart") == \
     set(["diamond_10"])
 
-def play_once(state):
+def play_once(state, choose_cbk):
     player_idx = state['player_idx']
     player_cards = state['p%i_hand' % player_idx]
     cards = possible_cards(player_cards, state['current'], state['trump'])
 
     #print("cards: %s" % cards)
-    card = random.choice(list(cards))
 
+    card = choose_cbk(list(cards))
+
+    #print("player cards: %s, possible cards: %s, selected card: %s" % (player_cards,cards,card))
     state['p%i_hand' % player_idx].remove(card)
     state['current'].append(card)
 
-    print("player %i plays %s" % (player_idx, card))
+    get_logger().debug("player %i plays %s" % (player_idx, card))
 
     if len(state['current']) == 4:
         count = count_round(state['current'], state['trump'])
-        player = player_winning_round(state['current'], state['trump'], (player_idx + 1) % 4)
+        player = player_holding_hand(state['current'], state['trump'], (player_idx + 1) % 4)
         team = player % 2
         assert player in range(4)
         assert team in [0,1]
-        state["t%i_points" % team] += count
+        state["t%i_game_points" % team] += count
         state['played'] += state['current']
         state['current'] = []
         state['player_idx'] = player # the winning player starts the next round
 
-        print("player %d & team %d wins the round: %d points" % (player, team, count))
+        get_logger().info("player %d & team %d wins the round: %d points" % (player, team, count))
         if len(state['played']) == 36:
-            state["t%i_points" % team] += 5 # five points for last round
-            print("game finished: team 0 %d pts, team 1 %d pts" % (state['t0_points'], state['t1_points']))
+            state["t%i_game_points" % team] += 5 # five points for last round
+            get_logger().info("game finished: team 0 %d pts, team 1 %d pts" % (state['t0_game_points'], state['t1_game_points']))
+
+            # which team did win the game?
+            # todo equal nb of points?
+            team = 0 if state['t0_game_points'] > state['t1_game_points'] else 1
+
+            state['t0_points'] += state['t0_game_points']
+            state['t1_points'] += state['t1_game_points']
+            state['t0_game_points'] = 0
+            state['t1_game_points'] = 0
+
+            return {'team': team, 'final': True}
+        else:
+            # the round is finished but not final, we know which team did win it
+            return {'team': team, 'final': False}
+
     else:
         # next player idx
         state['player_idx'] = (player_idx + 1) % 4
+        # the round is not yet finished
+        return None
 
-def play_round(state):
+def play_round(state, choose_cbk):
     for i in range(4):
-        play_once(state)
+        play_once(state, choose_cbk)
 
 def print_state(state):
-    print("---")
-    print("trump: %s" % state["trump"])
-    print("current: %s" % state["current"])
-    print("player 0: %s" % state["p0_hand"])
-    print("-------------------------------")
-    print("player 1: %s" % state["p1_hand"])
-    print("player 2: %s" % state["p2_hand"])
-    print("player 3: %s" % state["p3_hand"])
-    print("team 0: %d pts, team 1: %d pts" % (state["t0_points"], state["t1_points"]))
-    print("played: %s" % state['played'])
-    print("-------------------------------")
+    logger = get_logger()
+    logger.debug("-------------------------------")
+    logger.debug("trump: %s" % state["trump"])
+    logger.debug("current: %s" % state["current"])
+    logger.debug("player 0: %s" % state["p0_hand"])
+    logger.debug("player 1: %s" % state["p1_hand"])
+    logger.debug("player 2: %s" % state["p2_hand"])
+    logger.debug("player 3: %s" % state["p3_hand"])
+    logger.debug("team 0: %d pts, team 1: %d pts" % (state["t0_points"], state["t1_points"]))
+    logger.debug("played: %s" % state['played'])
+    logger.debug("-------------------------------")
+
+
+import logging
+import datetime
+import sys
+
+def create_logger():
+    logger = logging.getLogger('jassbot')
+    if logger is None:
+        #logger.setLevel(logging.INFO)
+
+        filelogger = logging.FileHandler('./logs/jassbot.log')
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        filelogger.setFormatter(formatter)
+        filelogger.setLevel(logging.DEBUG)
+        logger.addHandler(filelogger)
+
+        stdlogger = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        stdlogger.setFormatter(formatter)
+        stdlogger.setLevel(logging.INFO)
+        logger.addHandler(stdlogger)
+
+def get_logger():
+    return logging.getLogger('jassbot')
+
