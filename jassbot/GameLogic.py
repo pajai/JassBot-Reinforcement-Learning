@@ -177,10 +177,13 @@ def play_once(state, choose_cbk):
 
             state['t0_points'] += state['t0_game_points']
             state['t1_points'] += state['t1_game_points']
+
+            ratio = 1.0 * state['t0_game_points'] / (state['t0_game_points'] + state['t1_game_points'])
+
             state['t0_game_points'] = 0
             state['t1_game_points'] = 0
 
-            return {'team': team, 'final': True}
+            return {'team': team, 'ratio': ratio, 'final': True}
         else:
             # the round is finished but not final, we know which team did win it
             return {'team': team, 'final': False}

@@ -241,6 +241,7 @@ def update_model_game_end(model,temp_memory,round_wins,epsilon):
         y[yindex] = update
         #print('y is %s' % y)
 
+        #print("Shape of feat: %s" % feat.shape)
         model.fit(feat.reshape(1,input_layer_nb), y.reshape(1,36), batch_size=1, nb_epoch=1, verbose=0)
 
         i += 1
