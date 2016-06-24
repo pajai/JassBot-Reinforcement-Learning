@@ -44,7 +44,10 @@ def state2features(trump,player_hand,played,current,player_idx):
 
     feat = np.zeros(36 * 3 + 2)
 
-    cards2features(feat, 0*36, player_hand, ordered_suits)
+    # the first 36 features: only the possible cards
+    poss_cards = possible_cards(player_hand,current,trump)
+
+    cards2features(feat, 0*36, poss_cards,  ordered_suits)
     cards2features(feat, 1*36, played,      ordered_suits)
     cards2features(feat, 2*36, current,     ordered_suits)
 
