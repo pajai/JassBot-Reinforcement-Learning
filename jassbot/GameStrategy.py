@@ -115,12 +115,15 @@ def choose(state,possible_cards,model,temp_memory,epsilon):
     else: #choose best action from Q(s,a) values
         # first we get a feature vect corresponding to the possible move
 
-        mask_qval = np.zeros(36)
-        cards2features(mask_qval, 0, possible_cards, ordered_suits)
+        mask_possible = np.zeros(36)
+        cards2features(mask_possible, 0, possible_cards, ordered_suits)
+
+        mask_unpossible = (1-mask_possible)
 
         # now we can mask the qval we predicted with the possible moves
         # todo: proper solution
-        moves = qval  + (mask_qval * 1000)
+        moves = qval + (mask_possible * 1000) - (mask_unpossible * 1000)
+
         idx = (np.argmax(moves))
 
         # now we have a prediction, we reconstruct the card out of it
@@ -158,12 +161,14 @@ def choose_for_test(state,possible_cards,model,temp_memory,epsilon):
         # make a prediction
         qval = model.predict(feat.reshape(1,input_layer_nb), batch_size=1)[0]
 
-        mask_qval = np.zeros(36)
-        cards2features(mask_qval, 0, possible_cards, ordered_suits)
+        mask_possible = np.zeros(36)
+        cards2features(mask_possible, 0, possible_cards, ordered_suits)
+
+        mask_unpossible = (1-mask_possible)
 
         # now we can mask the qval we predicted with the possible moves
         # todo: proper solution
-        moves = qval + (mask_qval * 1000)
+        moves = qval + (mask_possible * 1000) - (mask_unpossible * 1000)
         idx = (np.argmax(moves))
         #print('ordered_suits: %s, mask_qval: %s, moves: %s, idx: %i' % (ordered_suits, mask_qval, moves, idx))
 
