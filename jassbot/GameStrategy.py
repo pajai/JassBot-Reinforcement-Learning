@@ -160,7 +160,7 @@ def choose(suit_order,state,possible_cards,model,temp_memory,epsilon):
         idx = (np.argmax(moves))
 
         # now we have a prediction, we reconstruct the card out of it
-        suit_idx = idx / 4
+        suit_idx = idx / 9
         rank_idx = idx % 9
         card = '%s_%s' % (suit_order[suit_idx], ranks[rank_idx])
 
