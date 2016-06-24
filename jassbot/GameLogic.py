@@ -236,3 +236,6 @@ def create_logger():
 def get_logger():
     return logging.getLogger('jassbot')
 
+def now_as_string():
+    return datetime.datetime.now().strftime("%Y-%m-%d-%H%M%S")
+

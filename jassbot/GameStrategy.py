@@ -10,9 +10,41 @@ from GameLogic import *
 
 #pd.set_option('display.max_columns', None)
 
+def sort_suits(suit_specs):
+    '''
+    Sort the given suit specifications according to the following criteria:
+    - take the suit with the largest nb first (more cards of that suits are better)
+    - take the suit with the lowest best_rank first (best_rank is an index in the rank list from best to worst)
+    :param suit_specs:
+    :return: sorted suit spec list
+    '''
+    def rank_order(i1,i2):
+        return i2['nb'] - i1['nb'] if i1['nb'] != i2['nb'] else i1['best_rank'] - i2['best_rank']
+    return sorted(suit_specs, cmp=rank_order)
+
+assert sort_suits([{'nb': 1, 'best_rank':4}, {'nb': 2, 'best_rank': 2}]) == \
+    [{'nb': 2, 'best_rank': 2}, {'nb': 1, 'best_rank':4}]
+assert sort_suits([{'nb': 1, 'best_rank':4}, {'nb': 1, 'best_rank': 2}]) == \
+    [{'nb': 1, 'best_rank': 2},{'nb': 1, 'best_rank':4}]
 
 def order_suits(hand, trump):
-    return [trump] + [s for s in suits if s != trump]
+    non_trump_suits = [s for s in suits if s != trump]
+
+    suit_specs = []
+    for suit in non_trump_suits:
+        cards_of_suit = [non_trump_ranking.index(card_rank(c)) for c in hand if c.startswith(suit)]
+        nb = len(cards_of_suit)
+        best_rank = min(cards_of_suit) if nb > 0 else 10
+        suit_specs.append({'suit': suit, 'nb': nb, 'best_rank': best_rank})
+
+    sorted_non_trump_suits = sort_suits(suit_specs)
+
+    return [trump] + [d['suit'] for d in sorted_non_trump_suits]
+
+assert order_suits(['club_8', 'club_10', 'club_k', 'heart_7', 'heart_a', 'diamond_j'], 'diamond') == \
+    ['diamond', 'club', 'heart', 'spade']
+assert order_suits(['club_8', 'club_10', 'club_k', 'heart_7', 'heart_a', 'heart_6', 'diamond_j'], 'diamond') == \
+    ['diamond', 'heart', 'club', 'spade']
 
 def cards2features(feat, offset, cards, ordered_suits):
     for card in cards:
@@ -39,17 +71,16 @@ assert(all(cards2features(np.zeros(36), 0, \
                                 0,0,0,0,0,0,0,0,0, \
                                 1,0,1,0,1,1,1,0,0])))
 
-def state2features(trump,player_hand,played,current,player_idx):
-    ordered_suits = order_suits(player_hand, trump)
+def state2features(suit_order,trump,player_hand,played,current,player_idx):
 
     feat = np.zeros(36 * 3 + 2)
 
     # the first 36 features: only the possible cards
-    poss_cards = possible_cards(player_hand,current,trump)
+    #poss_cards = possible_cards(player_hand,current,trump)
 
-    cards2features(feat, 0*36, poss_cards,  ordered_suits)
-    cards2features(feat, 1*36, played,      ordered_suits)
-    cards2features(feat, 2*36, current,     ordered_suits)
+    cards2features(feat, 0*36, player_hand,  suit_order)
+    cards2features(feat, 1*36, played,      suit_order)
+    cards2features(feat, 2*36, current,     suit_order)
 
     # does our team hold the hand
     if len(current) > 0:
@@ -91,7 +122,7 @@ def create_model():
     return model
 
 
-def choose(state,possible_cards,model,temp_memory,epsilon):
+def choose(suit_order,state,possible_cards,model,temp_memory,epsilon):
     player_idx = state['player_idx']
     trump = state['trump']
     player_hand = state['p%i_hand' % player_idx]
@@ -99,10 +130,9 @@ def choose(state,possible_cards,model,temp_memory,epsilon):
     current = state['current']
 
     # get features for this state
-    feat = state2features(trump,player_hand,played,current,player_idx)
+    feat = state2features(suit_order,trump,player_hand,played,current,player_idx)
 
     team_idx = player_idx % 2
-    ordered_suits = order_suits(player_hand, trump)
 
     # make a prediction
     qval = model.predict(feat.reshape(1,input_layer_nb), batch_size=1)
@@ -111,7 +141,7 @@ def choose(state,possible_cards,model,temp_memory,epsilon):
         card = random.choice(possible_cards)
 
         # list + [] in order to copy the list
-        temp_memory.append((team_idx,feat,qval,card,ordered_suits,trump,player_hand+[],played+[],current+[],player_idx))
+        temp_memory.append((team_idx,feat,qval,card,suit_order,trump,player_hand+[],played+[],current+[],player_idx))
 
         get_logger().info('random card choice: %s' % card)
 
@@ -119,7 +149,7 @@ def choose(state,possible_cards,model,temp_memory,epsilon):
         # first we get a feature vect corresponding to the possible move
 
         mask_possible = np.zeros(36)
-        cards2features(mask_possible, 0, possible_cards, ordered_suits)
+        cards2features(mask_possible, 0, possible_cards, suit_order)
 
         mask_unpossible = (1-mask_possible)
 
@@ -132,16 +162,16 @@ def choose(state,possible_cards,model,temp_memory,epsilon):
         # now we have a prediction, we reconstruct the card out of it
         suit_idx = idx / 4
         rank_idx = idx % 9
-        card = '%s_%s' % (ordered_suits[suit_idx], ranks[rank_idx])
+        card = '%s_%s' % (suit_order[suit_idx], ranks[rank_idx])
 
         # list + [] in order to copy the list
-        temp_memory.append((team_idx,feat,qval,card,ordered_suits,trump,player_hand+[],played+[],current+[],player_idx))
+        temp_memory.append((team_idx,feat,qval,card,suit_order,trump,player_hand+[],played+[],current+[],player_idx))
 
         get_logger().info('ml card choice: %s' % card)
 
     return card
 
-def choose_for_test(state,possible_cards,model,temp_memory,epsilon):
+def choose_for_test(suit_order,state,possible_cards,model,temp_memory,epsilon):
     player_idx = state['player_idx']
 
     # player_idx in [0,2] run using the model, while player_idx in [1,3] use random card selection
@@ -156,16 +186,15 @@ def choose_for_test(state,possible_cards,model,temp_memory,epsilon):
         current = state['current']
 
         # get features for this state
-        feat = state2features(trump,player_hand,played,current,player_idx)
+        feat = state2features(suit_order,trump,player_hand,played,current,player_idx)
 
         team_idx = player_idx % 2
-        ordered_suits = order_suits(player_hand, trump)
 
         # make a prediction
         qval = model.predict(feat.reshape(1,input_layer_nb), batch_size=1)[0]
 
         mask_possible = np.zeros(36)
-        cards2features(mask_possible, 0, possible_cards, ordered_suits)
+        cards2features(mask_possible, 0, possible_cards, suit_order)
 
         mask_unpossible = (1-mask_possible)
 
@@ -173,12 +202,12 @@ def choose_for_test(state,possible_cards,model,temp_memory,epsilon):
         # todo: proper solution
         moves = qval + (mask_possible * 1000) - (mask_unpossible * 1000)
         idx = (np.argmax(moves))
-        #print('ordered_suits: %s, mask_qval: %s, moves: %s, idx: %i' % (ordered_suits, mask_qval, moves, idx))
+        #print('suit_order: %s, mask_qval: %s, moves: %s, idx: %i' % (suit_orders, mask_qval, moves, idx))
 
         # now we have a prediction, we reconstruct the card out of it
         suit_idx = idx / 9
         rank_idx = idx % 9
-        card = '%s_%s' % (ordered_suits[suit_idx], ranks[rank_idx])
+        card = '%s_%s' % (suit_order[suit_idx], ranks[rank_idx])
         #print('possible cards: %s, chosen card: %s' % (possible_cards, card))
 
     return card
@@ -198,9 +227,9 @@ def play_card(card,player_hand,current,played):
         played += current
         current[:] = []
 
-def yindex_of_card(card, ordered_suits):
+def yindex_of_card(card, suit_order):
     suit = card_suit(card)
-    suit_idx = ordered_suits.index(suit)
+    suit_idx = suit_order.index(suit)
     rank = card_rank(card)
     rank_idx = ranks.index(rank)
     return suit_idx * 9 + rank_idx
@@ -213,7 +242,7 @@ def update_model_game_end(model,temp_memory,round_wins,epsilon):
     round_wins.reverse()
 
     i = 0
-    for (team_idx,feat,qval,card,ordered_suits,trump,player_hand,played,current,player_idx) \
+    for (team_idx,feat,qval,card,suit_order,trump,player_hand,played,current,player_idx) \
           in temp_memory:
         win_result = round_wins[i % 4]
         winning_team_idx = win_result['team']
@@ -232,7 +261,7 @@ def update_model_game_end(model,temp_memory,round_wins,epsilon):
 
             # update state with the move + feature of next state
             play_card(card,player_hand,current,played)
-            next_feat = state2features(trump,player_hand,played,current,player_idx)
+            next_feat = state2features(suit_order,trump,player_hand,played,current,player_idx)
 
             next_qval = model.predict(next_feat.reshape(1,input_layer_nb), batch_size=1)
 
@@ -242,7 +271,7 @@ def update_model_game_end(model,temp_memory,round_wins,epsilon):
             update = reward + (gamma * max_next_qval)
 
         # update the output with our updated value
-        yindex = yindex_of_card(card,ordered_suits)
+        yindex = yindex_of_card(card,suit_order)
         y = np.zeros([1,len(qval[0])])
         y = qval[0]
         get_logger().info('update is %s' % update)
