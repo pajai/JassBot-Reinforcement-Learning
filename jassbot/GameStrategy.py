@@ -7,8 +7,10 @@ from keras.optimizers import RMSprop
 
 from Config import *
 from GameLogic import *
+from utils.Logger import *
 
 #pd.set_option('display.max_columns', None)
+
 
 def sort_suits(suit_specs):
     '''
@@ -143,7 +145,7 @@ def choose(suit_order,state,possible_cards,model,temp_memory,epsilon):
         # list + [] in order to copy the list
         temp_memory.append((team_idx,feat,qval,card,suit_order,trump,player_hand+[],played+[],current+[],player_idx))
 
-        get_logger().info('random card choice: %s' % card)
+        logger.info('random card choice: %s' % card)
 
     else: #choose best action from Q(s,a) values
         # first we get a feature vect corresponding to the possible move
@@ -167,11 +169,11 @@ def choose(suit_order,state,possible_cards,model,temp_memory,epsilon):
         # list + [] in order to copy the list
         temp_memory.append((team_idx,feat,qval,card,suit_order,trump,player_hand+[],played+[],current+[],player_idx))
 
-        get_logger().info('ml card choice: %s' % card)
+        logger.info('ml card choice: %s' % card)
 
     return card
 
-def choose_for_test(suit_order,state,possible_cards,model,temp_memory,epsilon):
+def choose_for_test(suit_order,state,possible_cards,model):
     player_idx = state['player_idx']
 
     # player_idx in [0,2] run using the model, while player_idx in [1,3] use random card selection
@@ -208,6 +210,14 @@ def choose_for_test(suit_order,state,possible_cards,model,temp_memory,epsilon):
         suit_idx = idx / 9
         rank_idx = idx % 9
         card = '%s_%s' % (suit_order[suit_idx], ranks[rank_idx])
+
+        if card not in player_hand:
+            print("Warning: card %s not in hand %s" % (card, player_hand))
+            print("Possible cards: %s" % possible_cards)
+            print("Qval is: %s" % qval)
+            print("Moves: %s" % moves)
+            return random.choice(possible_cards)
+
         #print('possible cards: %s, chosen card: %s' % (possible_cards, card))
 
     return card
@@ -244,7 +254,8 @@ def update_model_game_end(model,temp_memory,round_wins,epsilon):
     i = 0
     for (team_idx,feat,qval,card,suit_order,trump,player_hand,played,current,player_idx) \
           in temp_memory:
-        win_result = round_wins[i % 4]
+        logger.info('team %i, card %s, trump %s, player %i' % (team_idx,card,trump,player_idx))
+        win_result = round_wins[i / 4]
         winning_team_idx = win_result['team']
         is_final = win_result['final']
 
@@ -253,8 +264,9 @@ def update_model_game_end(model,temp_memory,round_wins,epsilon):
         if is_final:
             assert reward in [-10,10]
 
-            # if final round, we only use reward for the target qval update
-            update = reward
+            # final state, we don't have a next max qval -> we put 0 so that the term
+            # vanishes
+            max_next_qval = 0
 
         else:
             assert reward in [-1,1]
@@ -267,14 +279,12 @@ def update_model_game_end(model,temp_memory,round_wins,epsilon):
 
             max_next_qval = np.max(next_qval)
 
-            # if not final round, we use the q-learning algo
-            update = reward + (gamma * max_next_qval)
-
         # update the output with our updated value
         yindex = yindex_of_card(card,suit_order)
         y = np.zeros([1,len(qval[0])])
         y = qval[0]
-        get_logger().info('update is %s' % update)
+        update = y[yindex] + alpha * (reward + (gamma * max_next_qval) - y[yindex])
+        logger.info('update qval %f -> %f (%s)' % (y[yindex], update, win_result))
         y[yindex] = update
         #print('y is %s' % y)
 

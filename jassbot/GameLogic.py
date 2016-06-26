@@ -2,9 +2,10 @@ import random
 import numpy as np
 
 from Config import *
+from utils.Logger import *
 
 def init():
-    get_logger().info("init game")
+    logger.info("init game")
 
     state = {}
     for i in range(2):
@@ -13,7 +14,7 @@ def init():
     return state
 
 def new_game(state):
-    get_logger().info("new game")
+    logger.info("new game")
     game = []
     for suit in suits:
         for rank in ranks:
@@ -153,7 +154,7 @@ def play_once(state, choose_cbk):
     state['p%i_hand' % player_idx].remove(card)
     state['current'].append(card)
 
-    get_logger().debug("player %i plays %s" % (player_idx, card))
+    logger.debug("player %i plays %s" % (player_idx, card))
 
     if len(state['current']) == 4:
         count = count_round(state['current'], state['trump'])
@@ -166,10 +167,10 @@ def play_once(state, choose_cbk):
         state['current'] = []
         state['player_idx'] = player # the winning player starts the next round
 
-        get_logger().info("player %d & team %d wins the round: %d points" % (player, team, count))
+        logger.info("player %d & team %d wins the round: %d points" % (player, team, count))
         if len(state['played']) == 36:
             state["t%i_game_points" % team] += 5 # five points for last round
-            get_logger().info("game finished: team 0 %d pts, team 1 %d pts" % (state['t0_game_points'], state['t1_game_points']))
+            logger.info("game finished: team 0 %d pts, team 1 %d pts" % (state['t0_game_points'], state['t1_game_points']))
 
             # which team did win the game?
             # todo equal nb of points?
@@ -199,7 +200,6 @@ def play_round(state, choose_cbk):
         play_once(state, choose_cbk)
 
 def print_state(state):
-    logger = get_logger()
     logger.debug("-------------------------------")
     logger.debug("trump: %s" % state["trump"])
     logger.debug("current: %s" % state["current"])
@@ -212,29 +212,7 @@ def print_state(state):
     logger.debug("-------------------------------")
 
 
-import logging
 import datetime
-import sys
-
-def create_logger():
-    logger = logging.getLogger('jassbot')
-    if logger is None:
-        #logger.setLevel(logging.INFO)
-
-        filelogger = logging.FileHandler('./logs/jassbot.log')
-        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-        filelogger.setFormatter(formatter)
-        filelogger.setLevel(logging.DEBUG)
-        logger.addHandler(filelogger)
-
-        stdlogger = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-        stdlogger.setFormatter(formatter)
-        stdlogger.setLevel(logging.INFO)
-        logger.addHandler(stdlogger)
-
-def get_logger():
-    return logging.getLogger('jassbot')
 
 def now_as_string():
     return datetime.datetime.now().strftime("%Y-%m-%d-%H%M%S")
