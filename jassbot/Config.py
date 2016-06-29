@@ -36,7 +36,7 @@ assert len(non_trump_point) == 9
 
 # gamma parameter of the q-learning algo
 # how much from the following best qval influence the previous one
-gamma = 0.9
+gamma = 0.90
 
 # learning rate
-alpha = 0.1
+alpha = 0.05

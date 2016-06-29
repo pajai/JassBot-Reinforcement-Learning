@@ -154,7 +154,7 @@ def play_once(state, choose_cbk):
     state['p%i_hand' % player_idx].remove(card)
     state['current'].append(card)
 
-    logger.debug("player %i plays %s" % (player_idx, card))
+    logger.info("player %i plays %s" % (player_idx, card))
 
     if len(state['current']) == 4:
         count = count_round(state['current'], state['trump'])
@@ -200,16 +200,16 @@ def play_round(state, choose_cbk):
         play_once(state, choose_cbk)
 
 def print_state(state):
-    logger.debug("-------------------------------")
-    logger.debug("trump: %s" % state["trump"])
-    logger.debug("current: %s" % state["current"])
-    logger.debug("player 0: %s" % state["p0_hand"])
-    logger.debug("player 1: %s" % state["p1_hand"])
-    logger.debug("player 2: %s" % state["p2_hand"])
-    logger.debug("player 3: %s" % state["p3_hand"])
-    logger.debug("team 0: %d pts, team 1: %d pts" % (state["t0_points"], state["t1_points"]))
-    logger.debug("played: %s" % state['played'])
-    logger.debug("-------------------------------")
+    logger.info("-------------------------------")
+    logger.info("trump: %s" % state["trump"])
+    logger.info("current: %s" % state["current"])
+    logger.info("player 0: %s" % state["p0_hand"])
+    logger.info("player 1: %s" % state["p1_hand"])
+    logger.info("player 2: %s" % state["p2_hand"])
+    logger.info("player 3: %s" % state["p3_hand"])
+    logger.info("team 0: %d pts, team 1: %d pts" % (state["t0_points"], state["t1_points"]))
+    logger.info("played: %s" % state['played'])
+    logger.info("-------------------------------")
 
 
 import datetime

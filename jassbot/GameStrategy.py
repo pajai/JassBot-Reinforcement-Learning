@@ -296,3 +296,21 @@ def update_model_game_end(model,temp_memory,round_wins,epsilon):
     # reset temp_memory and round_wins
     temp_memory[:] = []
     round_wins[:] = []
+
+
+def save_model(model, stats, comment):
+    now = now_as_string()
+
+    json_string = model.to_json()
+    text_file = open("data/%s-model.json" % now, "w")
+    text_file.write(json_string)
+    text_file.close()
+
+    model.save_weights("data/%s-weights.json" % now)
+
+    text_file = open("data/%s-comment.txt" % now, "w")
+    text_file.write("%s\n" % comment)
+    text_file.write("gamma: %f, alpha: %f\n" % (gamma, alpha))
+    text_file.close()
+
+    stats.to_csv("data/%s-stats.csv" % now)
