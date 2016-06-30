@@ -1,4 +1,5 @@
 import datetime
+import locale
 
 class Chrono:
 
@@ -15,8 +16,10 @@ class Chrono:
 
         start = self.start_times.pop()
         diff = (datetime.datetime.now() - start)
-        ms = diff.microseconds / 1000
+        ms = diff.seconds * 1000 + diff.microseconds / 1000
 
         if msg is not None:
-            print('%s: %i ms (%i)' % (msg, ms, length))
+            locale.setlocale(locale.LC_ALL, 'en_US')
+            formatted_ms = locale.format('%d', ms, grouping=True)
+            print('%s: %s ms (%i)' % (msg, formatted_ms, length))
         return ms

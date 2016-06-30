@@ -363,8 +363,7 @@ def train_and_test(model, state, stats, nb_simulations, nb_epochs, nb_test_runs,
                             update_model_game_end(model,temp_memory,round_wins,epsilon)
                             learning_time += chrono.stop()
 
-        chrono.stop('learning')
-        print('learning time: %i ms' % learning_time)
+        chrono.stop('learning time')
 
         game_wins = pd.DataFrame({'game won':[]})
         round_wins = pd.DataFrame({'round won':[]})
