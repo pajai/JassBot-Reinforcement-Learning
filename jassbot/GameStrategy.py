@@ -7,6 +7,7 @@ from keras.optimizers import RMSprop
 
 from Config import *
 from GameLogic import *
+from Chrono import *
 from utils.Logger import *
 
 #pd.set_option('display.max_columns', None)
@@ -314,3 +315,107 @@ def save_model(model, stats, comment):
     text_file.close()
 
     stats.to_csv("data/%s-stats.csv" % now)
+
+
+def train_and_test(model, state, stats, nb_simulations, nb_epochs, nb_test_runs, epsilon):
+    chrono = Chrono()
+    for s in range(nb_simulations):
+
+        temp_memory = []
+        round_wins = []
+        print('*** learning phase %i / %i' % (s + 1, nb_simulations))
+        chrono.start()
+        learning_time = 0
+        for epoch in range(nb_epochs):
+            new_game(state)
+            logger.info("*** start of a new game")
+            print_state(state)
+
+            # we first define the suit order used later for the algorithm, for each player
+            # (depending on his hand and the current trump suit)
+            suit_orders = []
+            for p in range(4):
+                player_hand = state['p%i_hand' % p]
+                trump = state['trump']
+                suit_order = order_suits(player_hand, trump)
+                suit_orders.append(suit_order)
+
+            for j in range(9):
+                for i in range(4):
+                    suit_order = suit_orders[i]
+
+                    #chrono.start()
+                    result = play_once(state, lambda (possible_cards): \
+                              choose(suit_order,state,possible_cards,model,temp_memory,epsilon))
+                    #chrono.stop("choose")
+
+                    assert i < 3 and result is None or \
+                           i == 3 and result is not None
+
+                    if i == 3: # at the end of one round
+
+                        round_wins.append(result)
+
+                        if len(state['played']) == 36:
+
+                            # the game is finished, we can update the model
+                            chrono.start()
+                            update_model_game_end(model,temp_memory,round_wins,epsilon)
+                            learning_time += chrono.stop()
+
+        chrono.stop('learning')
+        print('learning time: %i ms' % learning_time)
+
+        game_wins = pd.DataFrame({'game won':[]})
+        round_wins = pd.DataFrame({'round won':[]})
+
+        print('*** testing phase %i / %i' % (s + 1, nb_simulations))
+        game_wins_idx = 0
+        round_wins_idx = 0
+        chrono.start()
+        for epoch in range(nb_test_runs):
+            new_game(state)
+            logger.info("*** start of a new game")
+            print_state(state)
+
+            suit_orders = []
+            for p in range(4):
+                player_hand = state['p%i_hand' % p]
+                trump = state['trump']
+                suit_order = order_suits(player_hand, trump)
+                suit_orders.append(suit_order)
+
+            for j in range(9):
+                for i in range(4):
+                    suit_order = suit_orders[i]
+
+                    result = play_once(state, lambda (possible_cards): \
+                              choose_for_test(suit_order,state,possible_cards,model))
+
+                    if result is not None:
+                        team = result['team']
+                        is_final = result['final']
+
+                        if is_final:
+                            ratio = result['ratio']
+                            df = pd.DataFrame({'game won':[1 if team == 0 else 0], 'ratio': [ratio]}, index=[game_wins_idx])
+                            game_wins = game_wins.append(df)
+                            game_wins_idx += 1
+                        else:
+                            df = pd.DataFrame({'round won':[1 if team == 0 else 0]}, index=[round_wins_idx])
+                            round_wins = round_wins.append(df)
+                            round_wins_idx += 1
+        chrono.stop('test')
+
+        games_won = 1.0 * len(game_wins[game_wins['game won'] == 1]) / nb_test_runs
+        ratio = game_wins['ratio'].mean()
+
+        # we have 8 rounds, excepted the final one that we don't count here
+        rounds_won = 1.0 * len(round_wins[round_wins['round won'] == 1]) / (nb_test_runs * 8)
+
+        df = pd.DataFrame({'rounds won':[rounds_won], 'games won':[games_won], 'ratio':[ratio]},index=[s])
+        dp.display(df)
+        stats = stats.append(df)
+
+        if epsilon > 0.1:
+            epsilon -= (1.0 / nb_simulations)
