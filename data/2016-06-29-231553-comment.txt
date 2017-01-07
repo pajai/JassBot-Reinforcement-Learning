@@ -1,0 +1,2 @@
+first model which gets about 55% score against the random bot
+gamma: 0.900000, alpha: 0.050000
