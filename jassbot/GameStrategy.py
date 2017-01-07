@@ -124,6 +124,33 @@ def create_model():
     model.compile(loss='mse', optimizer=rms)
     return model
 
+hidden_layer_3_nb = 150
+hidden_layer_4_nb = 75
+
+def create_model_4layers():
+    model = Sequential()
+    model.add(Dense(hidden_layer_1_nb, init='lecun_uniform', input_shape=(input_layer_nb,)))
+    model.add(Activation('relu'))
+    #model.add(Dropout(0.2)) I'm not using dropout, but maybe you wanna give it a try?
+
+    model.add(Dense(hidden_layer_2_nb, init='lecun_uniform'))
+    model.add(Activation('relu'))
+    #model.add(Dropout(0.2))
+
+    model.add(Dense(hidden_layer_3_nb, init='lecun_uniform'))
+    model.add(Activation('relu'))
+    #model.add(Dropout(0.2))
+
+    model.add(Dense(hidden_layer_4_nb, init='lecun_uniform'))
+    model.add(Activation('relu'))
+    #model.add(Dropout(0.2))
+
+    model.add(Dense(output_layer_nb, init='lecun_uniform'))
+    model.add(Activation('linear')) #linear output so we can have range of real-valued outputs
+
+    rms = RMSprop()
+    model.compile(loss='mse', optimizer=rms)
+    return model
 
 def choose(suit_order,state,possible_cards,model,temp_memory,epsilon):
     player_idx = state['player_idx']
@@ -225,11 +252,21 @@ def choose_for_test(suit_order,state,possible_cards,model):
 
 
 
-def get_reward(winning_team_idx,team_idx,final_round):
-    if winning_team_idx == team_idx:
-        return 10 if final_round else 1
-    else:
-        return -10 if final_round else -1
+def get_reward(t0_points,t1_points,team_idx,final_round):
+    sign = 1.0 if team_idx == 0 else -1.0
+
+    # we don't reward winning a round, only winning the game
+    if t0_points == t1_points:
+        return 0
+    if not final_round:
+        pts = 0.5 if t0_points > t1_points else -0.5
+    else: # t0_points <> t1_points
+        if abs(t0_points - t1_points) >= 60:
+            pts = 10 if t0_points > t1_points else -10
+        else:
+            pts = 1 if t0_points > t1_points else -1
+
+    return sign * pts
 
 def play_card(card,player_hand,current,played):
     player_hand.remove(card)
@@ -257,20 +294,20 @@ def update_model_game_end(model,temp_memory,round_wins,epsilon):
           in temp_memory:
         logger.info('team %i, card %s, trump %s, player %i' % (team_idx,card,trump,player_idx))
         win_result = round_wins[i / 4]
-        winning_team_idx = win_result['team']
         is_final = win_result['final']
 
-        reward = get_reward(winning_team_idx,team_idx,is_final)
-
         if is_final:
-            assert reward in [-10,10]
+            t0_points = win_result['t0_points']
+            t1_points = win_result['t1_points']
+
+            reward = get_reward(t0_points,t1_points,team_idx,is_final)
 
             # final state, we don't have a next max qval -> we put 0 so that the term
             # vanishes
             max_next_qval = 0
 
         else:
-            assert reward in [-1,1]
+            reward = 0
 
             # update state with the move + feature of next state
             play_card(card,player_hand,current,played)
@@ -317,18 +354,19 @@ def save_model(model, stats, comment):
     stats.to_csv("data/%s-stats.csv" % now)
 
 
-def train_and_test(model, state, stats, nb_simulations, nb_epochs, nb_test_runs, epsilon):
+def train_and_test(model, state, nb_simulations, nb_epochs, nb_test_runs, epsilon):
     chrono = Chrono()
+    stats = pd.DataFrame({'rounds won':[], 'games won':[]})
     for s in range(nb_simulations):
 
         temp_memory = []
         round_wins = []
-        print('*** learning phase %i / %i' % (s + 1, nb_simulations))
+        print('*** learning phase %i / %i (eps: %.3f)' % (s + 1, nb_simulations, epsilon))
         chrono.start()
-        learning_time = 0
         for epoch in range(nb_epochs):
             new_game(state)
             logger.info("*** start of a new game")
+
             print_state(state)
 
             # we first define the suit order used later for the algorithm, for each player
@@ -359,9 +397,9 @@ def train_and_test(model, state, stats, nb_simulations, nb_epochs, nb_test_runs,
                         if len(state['played']) == 36:
 
                             # the game is finished, we can update the model
-                            chrono.start()
+                            #chrono.start()
                             update_model_game_end(model,temp_memory,round_wins,epsilon)
-                            learning_time += chrono.stop()
+                            #chrono.stop()
 
         chrono.stop('learning time')
 
@@ -404,7 +442,7 @@ def train_and_test(model, state, stats, nb_simulations, nb_epochs, nb_test_runs,
                             df = pd.DataFrame({'round won':[1 if team == 0 else 0]}, index=[round_wins_idx])
                             round_wins = round_wins.append(df)
                             round_wins_idx += 1
-        chrono.stop('test')
+        chrono.stop('testing time')
 
         games_won = 1.0 * len(game_wins[game_wins['game won'] == 1]) / nb_test_runs
         ratio = game_wins['ratio'].mean()
@@ -418,3 +456,5 @@ def train_and_test(model, state, stats, nb_simulations, nb_epochs, nb_test_runs,
 
         if epsilon > 0.1:
             epsilon -= (1.0 / nb_simulations)
+
+    return stats
